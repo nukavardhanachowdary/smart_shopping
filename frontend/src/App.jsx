@@ -4,6 +4,15 @@ import "./App.css";
 const API = import.meta.env?.VITE_API_URL || "http://localhost:5000/api";
 const money = n => `₹${Number(n).toLocaleString("en-IN")}`;
 
+const FALLBACK_PRODUCTS = [
+  { _id: "p1", name: "Wireless Headphones", description: "Comfortable headphones with clear sound.", category: "Electronics", price: 1499, rating: 4.5, image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=700" },
+  { _id: "p2", name: "Smart Watch", description: "A simple everyday smart watch.", category: "Electronics", price: 2499, rating: 4.4, image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=700" },
+  { _id: "p3", name: "Casual Backpack", description: "A useful backpack for college and travel.", category: "Fashion", price: 999, rating: 4.3, image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=700" },
+  { _id: "p4", name: "Running Shoes", description: "Lightweight shoes for everyday use.", category: "Fashion", price: 1899, rating: 4.6, image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=700" },
+  { _id: "p5", name: "Desk Lamp", description: "A modern lamp for your study table.", category: "Home", price: 799, rating: 4.2, image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=700" },
+  { _id: "p6", name: "Coffee Mug", description: "A reusable ceramic mug.", category: "Home", price: 299, rating: 4.1, image: "https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=700" }
+];
+
 function Stars({ rating }) {
   return (
     <span className="stars" title={`${rating} / 5`}>
@@ -31,7 +40,7 @@ function WishlistButton({ product, wishlist, onToggle }) {
 }
 
 export default function App() {
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState(FALLBACK_PRODUCTS);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [sortBy, setSortBy] = useState("default");
@@ -46,7 +55,7 @@ export default function App() {
   const [email, setEmail] = useState(() => localStorage.getItem("shopsmart_email") || "");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [placing, setPlacing] = useState(false);
 
   // Order history state
@@ -60,6 +69,7 @@ export default function App() {
   useEffect(() => { localStorage.setItem("shopsmart_cart", JSON.stringify(cart)); }, [cart]);
   useEffect(() => { localStorage.setItem("shopsmart_wishlist", JSON.stringify(wishlist)); }, [wishlist]);
 
+  // Load products with automatic fallback
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
@@ -68,14 +78,36 @@ export default function App() {
         setError("");
         const params = new URLSearchParams({ search, category });
         const response = await fetch(`${API}/products?${params}`, { signal: controller.signal });
-        if (!response.ok) throw new Error("Could not load products. Check the backend.");
-        setProducts(await response.json());
+        if (!response.ok) throw new Error("Backend response error");
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setProducts(data);
+        } else {
+          // Local filter if backend returns empty search
+          filterLocal(search, category);
+        }
       } catch (e) {
-        if (e.name !== "AbortError") setError(e.message);
+        if (e.name !== "AbortError") {
+          // Graceful fallback to built-in product collection (e.g. on GitHub Pages)
+          filterLocal(search, category);
+        }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
     }
+
+    function filterLocal(s, cat) {
+      let filtered = FALLBACK_PRODUCTS;
+      if (cat && cat !== "All") {
+        filtered = filtered.filter(p => p.category.toLowerCase() === cat.toLowerCase());
+      }
+      if (s && s.trim()) {
+        const query = s.trim().toLowerCase();
+        filtered = filtered.filter(p => p.name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query));
+      }
+      setProducts(filtered);
+    }
+
     load();
     return () => controller.abort();
   }, [search, category]);
@@ -92,7 +124,7 @@ export default function App() {
     setCart(old => {
       const found = old.find(x => x._id === product._id);
       return found
-        ? old.map(x => x._id === product._id ? { ...x, quantity: x.quantity + 1 } : x)
+        ? old.map(x => (x._id === product._id ? { ...x, quantity: x.quantity + 1 } : x))
         : [...old, { ...product, quantity: 1 }];
     });
     setMessage(`${product.name} added to cart.`);
@@ -122,36 +154,73 @@ export default function App() {
 
   async function checkout(event) {
     event.preventDefault();
+    const placedEmail = email.trim().toLowerCase();
+    const placedName = name.trim();
+    const orderItems = cart.map(x => ({
+      productId: x._id,
+      name: x.name,
+      image: x.image,
+      price: x.price,
+      quantity: x.quantity
+    }));
+
     try {
       setPlacing(true);
       setError("");
       setMessage("");
-      const response = await fetch(`${API}/orders`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerName: name,
-          email,
-          items: cart.map(x => ({ productId: x._id, quantity: x.quantity }))
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Order failed");
 
-      const placedEmail = email.trim().toLowerCase();
+      let orderId = `ORD-${Date.now().toString(36).toUpperCase()}`;
+      let totalAmount = total;
+
+      try {
+        const response = await fetch(`${API}/orders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerName: placedName,
+            email: placedEmail,
+            items: cart.map(x => ({ productId: x._id, quantity: x.quantity }))
+          })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          orderId = data.orderId || orderId;
+          totalAmount = data.totalAmount || totalAmount;
+        }
+      } catch {
+        // Backend offline / GitHub Pages demo mode: proceed with local order
+      }
+
+      // Always save order to local storage history
+      const newOrder = {
+        _id: orderId,
+        customerName: placedName,
+        email: placedEmail,
+        items: orderItems,
+        totalAmount,
+        createdAt: new Date().toISOString()
+      };
+
+      try {
+        const savedOrders = JSON.parse(localStorage.getItem("shopsmart_orders") || "[]");
+        savedOrders.unshift(newOrder);
+        localStorage.setItem("shopsmart_orders", JSON.stringify(savedOrders));
+      } catch {
+        // ignore storage errors
+      }
+
       setLastOrderEmail(placedEmail);
       setOrderEmail(placedEmail);
-      localStorage.setItem("shopsmart_name", name.trim());
+      localStorage.setItem("shopsmart_name", placedName);
       localStorage.setItem("shopsmart_email", placedEmail);
 
-      setMessage(`🎉 Order placed! Order ID: ${data.orderId}. Total: ${money(data.totalAmount)}.`);
+      setMessage(`🎉 Order placed! Order ID: ${orderId}. Total: ${money(totalAmount)}.`);
       setCart([]);
       setPage("home");
 
-      // Auto-load history for the placed email
       await loadOrders(placedEmail);
     } catch (e) {
-      setError(e.message);
+      setError(e.message || "Could not place order");
     } finally {
       setPlacing(false);
     }
@@ -167,10 +236,33 @@ export default function App() {
       setOrdersLoading(true);
       setOrdersError("");
       setOrders([]);
-      const response = await fetch(`${API}/orders?email=${encodeURIComponent(q)}`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Could not load orders");
-      setOrders(data);
+
+      let loaded = [];
+      try {
+        const response = await fetch(`${API}/orders?email=${encodeURIComponent(q)}`);
+        if (response.ok) {
+          loaded = await response.json();
+        }
+      } catch {
+        // backend offline
+      }
+
+      // Merge with localStorage orders
+      try {
+        const localSaved = JSON.parse(localStorage.getItem("shopsmart_orders") || "[]");
+        const matchingLocal = localSaved.filter(o => o.email === q);
+        const seenIds = new Set(loaded.map(x => x._id));
+        for (const loc of matchingLocal) {
+          if (!seenIds.has(loc._id)) {
+            loaded.push(loc);
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      loaded.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      setOrders(loaded);
       localStorage.setItem("shopsmart_email", q);
     } catch (e) {
       setOrdersError(e.message);

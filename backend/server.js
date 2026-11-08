@@ -15,6 +15,23 @@ const escapeRegex = (text = "") => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$
 
 app.get("/api/health", (req, res) => res.json({ message: "ShopSmart backend is running" }));
 
+// GET orders by email (order history)
+app.get("/api/orders", async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email?.trim()) {
+      return res.status(400).json({ error: "Email is required to view order history." });
+    }
+    const orders = await Order.find({ email: email.trim().toLowerCase() })
+      .sort({ createdAt: -1 })
+      .limit(50);
+    res.json(orders);
+  } catch (error) {
+    console.error("Could not load order history:", error);
+    res.status(500).json({ error: "Could not load order history" });
+  }
+});
+
 app.get("/api/products", async (req, res) => {
   try {
     const { search = "", category = "All" } = req.query;
@@ -57,6 +74,7 @@ app.post("/api/orders", async (req, res) => {
       if (!product || !Number.isInteger(quantity) || quantity < 1) {
         return res.status(400).json({ error: "A cart product or quantity is invalid." });
       }
+
       orderItems.push({
         productId: product._id,
         name: product.name,
@@ -69,7 +87,7 @@ app.post("/api/orders", async (req, res) => {
 
     const order = await Order.create({
       customerName: customerName.trim(),
-      email: email.trim(),
+      email: email.trim().toLowerCase(),
       items: orderItems,
       totalAmount
     });

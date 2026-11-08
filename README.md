@@ -1,22 +1,85 @@
-# ShopSmart - Smart Shopping Website
+# ShopSmart — Smart Shopping Website
 
-Full-stack demo: React + CSS + JavaScript + Node.js + Express + MongoDB.
+A full-stack e-commerce demo built with **React + Node.js + Express + MongoDB**.
 
-## Setup
-1. Install Node.js and run MongoDB locally, or use MongoDB Atlas.
-2. In `backend`, copy `.env.example` to `.env` and set your MongoDB URL.
-3. Backend terminal:
-   ```bash
-   cd backend
-   npm install
-   npm run dev
-   ```
-4. Frontend terminal:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-5. Open the Vite URL shown in the frontend terminal (usually http://localhost:5173).
+## ✨ Features
 
-Keep both terminals running. Demo checkout does not collect payment. Cart contents are held in React state and clear on browser refresh. Product photos load from remote image URLs.
+- 🛒 **Product catalog** with search, category filter & sort (price / rating)
+- 💖 **Wishlist** — save products for later (persists across page refresh)
+- 🛍️ **Shopping cart** with quantity controls (persists across page refresh)
+- 📦 **Demo checkout** — place orders with name & email
+- 📋 **Order history** — look up all past orders by email after checkout
+- ⭐ **Star ratings** UI on every product card
+- 📱 **Responsive design** for mobile and desktop
+
+## 🚀 Setup
+
+### Prerequisites
+- Node.js (v18+)
+- MongoDB (local) **or** a [MongoDB Atlas](https://www.mongodb.com/atlas) free cluster
+
+### 1. Backend
+
+```bash
+cd backend
+npm install
+```
+
+Copy the example env file and add your MongoDB connection string:
+
+```bash
+cp .env.example .env
+# Edit .env and set:  MONGO_URI=mongodb://localhost:27017/shopsmart
+```
+
+Start the backend:
+
+```bash
+npm run dev
+```
+
+The backend runs on **http://localhost:5000**. Sample products are seeded automatically on first run.
+
+### 2. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL shown in the terminal (usually **http://localhost:5173**).
+
+> Keep **both terminals** running at the same time.
+
+## 🔌 API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check |
+| GET | `/api/products?search=&category=` | List / search products |
+| POST | `/api/orders` | Place a demo order |
+| GET | `/api/orders?email=` | Get order history by email |
+
+## 📁 Project Structure
+
+```
+ShopSmart_Complete/
+├── backend/
+│   ├── models/
+│   │   ├── Product.js
+│   │   └── Order.js
+│   ├── server.js
+│   ├── seed.js
+│   └── .env.example
+└── frontend/
+    └── src/
+        ├── App.jsx
+        └── App.css
+```
+
+## ⚠️ Notes
+
+- Demo only — **no real payment** is collected
+- Cart and wishlist persist via `localStorage`
+- Product images load from Unsplash (requires internet)

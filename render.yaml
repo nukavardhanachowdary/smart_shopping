@@ -8,7 +8,6 @@ services:
     startCommand: node server.js
     envVars:
       - key: MONGO_URI
-        sync: false   # You will paste this value in Render dashboard
+        sync: false
       - key: PORT
-        value: 5000
-
+        value: 10000

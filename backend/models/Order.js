@@ -1,9 +1,10 @@
 import mongoose from "mongoose";
+
 const schema = new mongoose.Schema({
   customerName: { type: String, required: true },
   email: { type: String, required: true },
   items: [{
-    productId: mongoose.Schema.Types.ObjectId,
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
     name: String,
     image: String,
     price: Number,
@@ -11,4 +12,5 @@ const schema = new mongoose.Schema({
   }],
   totalAmount: { type: Number, required: true }
 }, { timestamps: true });
-export default mongoose.model("Order", schema);
+
+export default mongoose.models.Order || mongoose.model("Order", schema);

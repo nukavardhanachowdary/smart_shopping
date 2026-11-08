@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: shopsmart-backend
+    env: node
+    region: singapore
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: MONGO_URI
+        sync: false   # You will paste this value in Render dashboard
+      - key: PORT
+        value: 5000

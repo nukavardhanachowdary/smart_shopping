@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
-const API = import.meta.env?.VITE_API_URL || "http://localhost:5000/api";
+const IS_LOCAL = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+const API = (import.meta.env?.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) || (IS_LOCAL ? "http://localhost:5000/api" : null);
 const money = n => `₹${Number(n).toLocaleString("en-IN")}`;
 
 const FALLBACK_PRODUCTS = [
@@ -69,8 +70,28 @@ export default function App() {
   useEffect(() => { localStorage.setItem("shopsmart_cart", JSON.stringify(cart)); }, [cart]);
   useEffect(() => { localStorage.setItem("shopsmart_wishlist", JSON.stringify(wishlist)); }, [wishlist]);
 
-  // Load products with automatic fallback
+  function filterLocal(s, cat) {
+    let filtered = FALLBACK_PRODUCTS;
+    if (cat && cat !== "All") {
+      filtered = filtered.filter(p => p.category.toLowerCase() === cat.toLowerCase());
+    }
+    if (s && s.trim()) {
+      const query = s.trim().toLowerCase();
+      filtered = filtered.filter(p => p.name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query));
+    }
+    setProducts(filtered);
+  }
+
+  // Load products
   useEffect(() => {
+    // If not on localhost and no remote API configured (e.g. GitHub Pages), use local catalog without failing
+    if (!API) {
+      filterLocal(search, category);
+      setError("");
+      setLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     async function load() {
       try {
@@ -78,34 +99,20 @@ export default function App() {
         setError("");
         const params = new URLSearchParams({ search, category });
         const response = await fetch(`${API}/products?${params}`, { signal: controller.signal });
-        if (!response.ok) throw new Error("Backend response error");
+        if (!response.ok) throw new Error("Could not load products from backend");
         const data = await response.json();
         if (Array.isArray(data) && data.length > 0) {
           setProducts(data);
         } else {
-          // Local filter if backend returns empty search
           filterLocal(search, category);
         }
       } catch (e) {
         if (e.name !== "AbortError") {
-          // Graceful fallback to built-in product collection (e.g. on GitHub Pages)
           filterLocal(search, category);
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
-    }
-
-    function filterLocal(s, cat) {
-      let filtered = FALLBACK_PRODUCTS;
-      if (cat && cat !== "All") {
-        filtered = filtered.filter(p => p.category.toLowerCase() === cat.toLowerCase());
-      }
-      if (s && s.trim()) {
-        const query = s.trim().toLowerCase();
-        filtered = filtered.filter(p => p.name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query));
-      }
-      setProducts(filtered);
     }
 
     load();
@@ -172,26 +179,28 @@ export default function App() {
       let orderId = `ORD-${Date.now().toString(36).toUpperCase()}`;
       let totalAmount = total;
 
-      try {
-        const response = await fetch(`${API}/orders`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            customerName: placedName,
-            email: placedEmail,
-            items: cart.map(x => ({ productId: x._id, quantity: x.quantity }))
-          })
-        });
-        if (response.ok) {
-          const data = await response.json();
-          orderId = data.orderId || orderId;
-          totalAmount = data.totalAmount || totalAmount;
+      if (API) {
+        try {
+          const response = await fetch(`${API}/orders`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              customerName: placedName,
+              email: placedEmail,
+              items: cart.map(x => ({ productId: x._id, quantity: x.quantity }))
+            })
+          });
+          if (response.ok) {
+            const data = await response.json();
+            orderId = data.orderId || orderId;
+            totalAmount = data.totalAmount || totalAmount;
+          }
+        } catch {
+          // fallback to local order
         }
-      } catch {
-        // Backend offline / GitHub Pages demo mode: proceed with local order
       }
 
-      // Always save order to local storage history
+      // Save order to local storage history
       const newOrder = {
         _id: orderId,
         customerName: placedName,
@@ -206,7 +215,7 @@ export default function App() {
         savedOrders.unshift(newOrder);
         localStorage.setItem("shopsmart_orders", JSON.stringify(savedOrders));
       } catch {
-        // ignore storage errors
+        // ignore
       }
 
       setLastOrderEmail(placedEmail);
@@ -238,13 +247,15 @@ export default function App() {
       setOrders([]);
 
       let loaded = [];
-      try {
-        const response = await fetch(`${API}/orders?email=${encodeURIComponent(q)}`);
-        if (response.ok) {
-          loaded = await response.json();
+      if (API) {
+        try {
+          const response = await fetch(`${API}/orders?email=${encodeURIComponent(q)}`);
+          if (response.ok) {
+            loaded = await response.json();
+          }
+        } catch {
+          // backend offline
         }
-      } catch {
-        // backend offline
       }
 
       // Merge with localStorage orders
